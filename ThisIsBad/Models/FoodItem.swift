@@ -93,6 +93,9 @@ class FoodItem {
     // When the item was added to the app
     var dateAdded: Date
 
+    // Manual sort order (used when sorting is set to manual)
+    var sortOrder: Int
+
     // MARK: - Computed Properties
 
     // Convert the raw string back to the StorageLocation enum
@@ -156,5 +159,6 @@ class FoodItem {
         self.notes = notes
         self.statusRaw = ItemStatus.active.rawValue
         self.dateAdded = Date()
+        self.sortOrder = 0
     }
 }

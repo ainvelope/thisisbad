@@ -13,14 +13,6 @@ struct FoodItemRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // MARK: Status Indicator
-            // Shows a colored icon based on expiration status.
-            // We use both color AND icon for accessibility.
-            Image(systemName: item.expirationStatus.iconName)
-                .foregroundStyle(statusColor)
-                .font(.title2)
-                .accessibilityLabel(item.expirationStatus.accessibilityLabel)
-
             // MARK: Item Details
             VStack(alignment: .leading, spacing: 4) {
                 // Item name
