@@ -9,6 +9,14 @@ struct AddItemView: View {
     // The default location (based on which tab was selected)
     let defaultLocation: StorageLocation
 
+    /// Called when save completes in tab mode (e.g. to switch back to Home).
+    /// When nil, the view dismisses itself (sheet mode).
+    var onSaveComplete: (() -> Void)? = nil
+
+    /// Called when cancel is tapped in tab mode (e.g. to switch back to Home).
+    /// When nil, the view dismisses itself (sheet mode).
+    var onCancel: (() -> Void)? = nil
+
     // Access the presentation mode to dismiss this view
     @Environment(\.dismiss) private var dismiss
 
@@ -25,6 +33,9 @@ struct AddItemView: View {
     @State private var location: StorageLocation = .fridge
     @State private var expirationDate: Date = Date()
     @State private var notes: String = ""
+    @State private var sizeQuantity: String = ""
+    @State private var sizeUnit: SizeUnit = .none
+    @State private var remainingAmount: Double = 1.0
 
     // Tracks whether we've attempted to submit (for validation display)
     @State private var hasAttemptedSave = false
@@ -69,6 +80,35 @@ struct AddItemView: View {
                         selection: $expirationDate,
                         displayedComponents: .date
                     )
+
+                    // Size field (optional): quantity + unit dropdown
+                    HStack(spacing: 12) {
+                        TextField("Qty", text: $sizeQuantity)
+                            .keyboardType(.decimalPad)
+                            .frame(maxWidth: .infinity)
+                            .accessibilityLabel("Size quantity, optional")
+
+                        Picker("Unit", selection: $sizeUnit) {
+                            ForEach(SizeUnit.allCases) { unit in
+                                Text(unit.displayName).tag(unit)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .frame(maxWidth: .infinity)
+                        .accessibilityLabel("Size unit, optional")
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Size optional: quantity and unit")
+
+                    // Amount remaining toggle
+                    Picker("Amount Remaining", selection: $remainingAmount) {
+                        Text("Low").tag(0.0)
+                        Text("Full").tag(1.0)
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityLabel("Amount remaining, \(remainingAmount >= 0.5 ? "Full" : "Low")")
+
                 } header: {
                     Text("Item Details")
                 }
@@ -86,10 +126,21 @@ struct AddItemView: View {
             .navigationTitle("Add Item")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                // Done button above numeric keyboard
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    }
+                }
                 // Cancel button
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
-                        dismiss()
+                        if let onCancel {
+                            onCancel()
+                        } else {
+                            dismiss()
+                        }
                     }
                 }
 
@@ -121,12 +172,15 @@ struct AddItemView: View {
         // Create the new food item
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sizeString = SizeUnit.format(quantity: sizeQuantity, unit: sizeUnit)
 
         let newItem = FoodItem(
             name: trimmedName,
             location: location,
             expirationDate: expirationDate,
-            notes: trimmedNotes.isEmpty ? nil : trimmedNotes
+            notes: trimmedNotes.isEmpty ? nil : trimmedNotes,
+            remainingAmount: remainingAmount,
+            size: sizeString
         )
 
         // Insert the item into SwiftData (this automatically saves it)
@@ -135,8 +189,12 @@ struct AddItemView: View {
         // Schedule notifications for this item
         notificationService.scheduleNotifications(for: newItem)
 
-        // Dismiss the view
-        dismiss()
+        // Dismiss or switch tab based on presentation context
+        if let onSaveComplete {
+            onSaveComplete()
+        } else {
+            dismiss()
+        }
     }
 }
 

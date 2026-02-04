@@ -2,23 +2,10 @@ import SwiftUI
 import SwiftData
 
 // MARK: - Sort Option
-// Defines the available sorting options for the food list
-enum SortOption: String, CaseIterable, Identifiable {
-    case expirationDate = "Expiration Date"
+enum FoodListSortOption: String, CaseIterable {
     case name = "Name"
-    case dateAdded = "Date Added"
-    case manual = "Manual"
-
-    var id: String { rawValue }
-
-    var iconName: String {
-        switch self {
-        case .expirationDate: return "calendar"
-        case .name: return "textformat.abc"
-        case .dateAdded: return "clock"
-        case .manual: return "hand.draw"
-        }
-    }
+    case expirationDate = "Expiration Date"
+    case remainingAmount = "Remaining Amount"
 }
 
 // MARK: - Food List View
@@ -30,39 +17,34 @@ struct FoodListView: View {
     let location: StorageLocation
 
     // @Query automatically fetches FoodItem data from SwiftData.
-    // The results update automatically when the database changes.
-    // We sort by expiration date so items expiring soonest appear first.
     @Query(sort: \FoodItem.expirationDate) private var allItems: [FoodItem]
 
-    // Access the SwiftData model context for delete operations
     @Environment(\.modelContext) private var modelContext
-
-    // Access the notification service to cancel notifications when items are deleted
     @EnvironmentObject private var notificationService: NotificationService
 
-    // Current sort option
-    @State private var sortOption: SortOption = .expirationDate
-
-    // Whether manual sorting (edit mode) is active
-    @State private var isEditMode: Bool = false
+    @State private var sortOption: FoodListSortOption = .expirationDate
+    @State private var isEditing = false
+    @State private var selectedIds: Set<UUID> = []
+    @State private var showingDeleteAllAlert = false
 
     // MARK: - Computed Properties
 
-    // Filter and sort items based on current settings
+    // Filter items to show only active items in the current location
     private var filteredItems: [FoodItem] {
-        let filtered = allItems.filter { item in
+        allItems.filter { item in
             item.location == location && item.status == .active
         }
+    }
 
+    // Sort filtered items by the selected option
+    private var sortedItems: [FoodItem] {
         switch sortOption {
-        case .expirationDate:
-            return filtered.sorted { $0.expirationDate < $1.expirationDate }
         case .name:
-            return filtered.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        case .dateAdded:
-            return filtered.sorted { $0.dateAdded < $1.dateAdded }
-        case .manual:
-            return filtered.sorted { $0.sortOrder < $1.sortOrder }
+            filteredItems.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        case .expirationDate:
+            filteredItems.sorted { $0.expirationDate < $1.expirationDate }
+        case .remainingAmount:
+            filteredItems.sorted { $0.remainingAmount < $1.remainingAmount }
         }
     }
 
@@ -71,143 +53,118 @@ struct FoodListView: View {
     var body: some View {
         Group {
             if filteredItems.isEmpty {
-                // MARK: Empty State
-                // Show a friendly message when there are no items
                 ContentUnavailableView {
                     Label("No Items", systemImage: location.iconName)
                 } description: {
                     Text("Tap the + button to add food to your \(location.rawValue.lowercased()).")
                 }
             } else {
-                // MARK: Item List
-                if isEditMode && sortOption == .manual {
-                    // Use UIKit-based reorderable list for manual sorting
-                    ReorderableListView(
-                        items: filteredItems,
-                        onReorder: { sourceIndex, destinationIndex in
-                            reorderItems(from: sourceIndex, to: destinationIndex)
-                        },
-                        onDelete: { index in
-                            deleteItem(at: index)
-                        }
-                    )
-                } else {
-                    List {
-                        ForEach(filteredItems) { item in
-                            // Use NavigationLink for navigation to edit view
+                List(selection: $selectedIds) {
+                    ForEach(sortedItems) { item in
+                        if isEditing {
+                            FoodItemRow(item: item)
+                                .tag(item.id)
+                                .deleteDisabled(true)
+                        } else {
                             NavigationLink {
                                 EditItemView(item: item)
                             } label: {
                                 FoodItemRow(item: item)
                             }
+                            .tag(item.id)
                         }
-                        // Enable swipe-to-delete
-                        .onDelete(perform: deleteItems)
                     }
-                    .listStyle(.plain)
+                    .onDelete(perform: deleteItems)
                 }
+                .listStyle(.plain)
+                .environment(\.editMode, .constant(isEditing ? .active : .inactive))
             }
         }
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                HStack(spacing: 16) {
-                    // Edit button for manual sorting
-                    if sortOption == .manual && !filteredItems.isEmpty {
-                        Button {
-                            withAnimation {
-                                isEditMode.toggle()
-                            }
-                        } label: {
-                            Image(systemName: isEditMode ? "checkmark.circle.fill" : "pencil.circle")
-                                .font(.title3)
-                        }
-                        .accessibilityLabel(isEditMode ? "Done editing" : "Edit order")
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(isEditing ? "Done" : "Edit") {
+                    isEditing.toggle()
+                    if !isEditing {
+                        selectedIds.removeAll()
                     }
+                }
+                .disabled(filteredItems.isEmpty)
+            }
 
-                    // Sort menu
-                    Menu {
-                        ForEach(SortOption.allCases) { option in
-                            Button {
-                                sortOption = option
-                                if option != .manual {
-                                    isEditMode = false
-                                }
-                            } label: {
-                                Label {
-                                    Text(option.rawValue)
-                                } icon: {
-                                    if sortOption == option {
-                                        Image(systemName: "checkmark")
-                                    }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Menu {
+                    ForEach(FoodListSortOption.allCases, id: \.self) { option in
+                        Button {
+                            sortOption = option
+                        } label: {
+                            HStack {
+                                Text(option.rawValue)
+                                if sortOption == option {
+                                    Image(systemName: "checkmark")
                                 }
                             }
+                        }
+                    }
+                } label: {
+                    Label("Sort", systemImage: "arrow.up.arrow.down.circle")
+                }
+                .disabled(filteredItems.isEmpty)
+            }
+
+            if isEditing {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Menu {
+                        Button(role: .destructive) {
+                            deleteSelectedItems()
+                        } label: {
+                            Label("Delete Selected", systemImage: "trash")
+                        }
+                        .disabled(selectedIds.isEmpty)
+
+                        Button(role: .destructive) {
+                            showingDeleteAllAlert = true
+                        } label: {
+                            Label("Delete All", systemImage: "trash.fill")
                         }
                     } label: {
-                        Image(systemName: "arrow.up.arrow.down.circle")
-                            .font(.title3)
+                        Image(systemName: "trash")
                     }
-                    .accessibilityLabel("Sort options")
                 }
             }
         }
-        .onChange(of: sortOption) { oldValue, newValue in
-            // When switching to manual sort, initialize sort orders if needed
-            if newValue == .manual {
-                initializeSortOrdersIfNeeded()
+        .alert("Delete All Items?", isPresented: $showingDeleteAllAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete All", role: .destructive) {
+                deleteAllItems()
+                isEditing = false
+                selectedIds.removeAll()
             }
+        } message: {
+            Text("This will permanently remove all \(filteredItems.count) items from your \(location.rawValue.lowercased()).")
         }
     }
 
     // MARK: - Methods
 
-    // Initialize sort orders based on current order if not already set
-    private func initializeSortOrdersIfNeeded() {
-        let items = filteredItems
-        var needsUpdate = false
-
-        // Check if all items have sortOrder of 0 (uninitialized)
-        for item in items {
-            if item.sortOrder != 0 {
-                needsUpdate = false
-                break
-            }
-            needsUpdate = true
-        }
-
-        if needsUpdate {
-            for (index, item) in items.enumerated() {
-                item.sortOrder = index
-            }
-        }
-    }
-
-    // Reorder items when dragged in edit mode
-    private func reorderItems(from sourceIndex: Int, to destinationIndex: Int) {
-        var items = filteredItems
-
-        let movedItem = items.remove(at: sourceIndex)
-        items.insert(movedItem, at: destinationIndex)
-
-        // Update sort orders
-        for (index, item) in items.enumerated() {
-            item.sortOrder = index
-        }
-    }
-
-    // Delete a single item at the specified index
-    private func deleteItem(at index: Int) {
-        let item = filteredItems[index]
-        notificationService.cancelNotification(for: item)
-        modelContext.delete(item)
-    }
-
-    // Delete items at the specified index positions
     private func deleteItems(at offsets: IndexSet) {
         for index in offsets {
-            let item = filteredItems[index]
-            // Cancel any scheduled notifications for this item
+            let item = sortedItems[index]
             notificationService.cancelNotification(for: item)
-            // Delete the item from SwiftData
+            modelContext.delete(item)
+        }
+    }
+
+    private func deleteSelectedItems() {
+        for item in sortedItems where selectedIds.contains(item.id) {
+            notificationService.cancelNotification(for: item)
+            modelContext.delete(item)
+        }
+        selectedIds.removeAll()
+    }
+
+    private func deleteAllItems() {
+        for item in filteredItems {
+            notificationService.cancelNotification(for: item)
             modelContext.delete(item)
         }
     }

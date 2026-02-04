@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 
 // MARK: - Edit Item View
-// A form for editing an existing food item or marking it as used/discarded.
+// A form for editing an existing food item.
 struct EditItemView: View {
     // MARK: - Properties
 
@@ -26,6 +26,9 @@ struct EditItemView: View {
     @State private var location: StorageLocation = .fridge
     @State private var expirationDate: Date = Date()
     @State private var notes: String = ""
+    @State private var sizeQuantity: String = ""
+    @State private var sizeUnit: SizeUnit = .none
+    @State private var remainingAmount: Double = 1.0
 
     // Tracks whether we've attempted to submit (for validation)
     @State private var hasAttemptedSave = false
@@ -66,6 +69,34 @@ struct EditItemView: View {
                     selection: $expirationDate,
                     displayedComponents: .date
                 )
+
+                // Size field (optional): quantity + unit dropdown
+                HStack(spacing: 12) {
+                    TextField("Qty", text: $sizeQuantity)
+                        .keyboardType(.decimalPad)
+                        .frame(maxWidth: .infinity)
+                        .accessibilityLabel("Size quantity, optional")
+
+                    Picker("Unit", selection: $sizeUnit) {
+                        ForEach(SizeUnit.allCases) { unit in
+                            Text(unit.displayName).tag(unit)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .frame(maxWidth: .infinity)
+                    .accessibilityLabel("Size unit, optional")
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Size optional: quantity and unit")
+
+                // Amount remaining toggle
+                Picker("Amount Remaining", selection: $remainingAmount) {
+                    Text("Low").tag(0.0)
+                    Text("Full").tag(1.0)
+                }
+                .pickerStyle(.segmented)
+                .accessibilityLabel("Amount remaining, \(remainingAmount >= 0.5 ? "Full" : "Low")")
             } header: {
                 Text("Item Details")
             }
@@ -76,29 +107,6 @@ struct EditItemView: View {
                     .lineLimit(2...4)
             } header: {
                 Text("Additional Info")
-            }
-
-            // MARK: Quick Actions Section
-            Section {
-                // Mark as Used button
-                Button {
-                    markAsUsed()
-                } label: {
-                    Label("Mark as Used", systemImage: "checkmark.circle")
-                }
-                .tint(.green)
-
-                // Mark as Discarded button
-                Button {
-                    markAsDiscarded()
-                } label: {
-                    Label("Mark as Discarded", systemImage: "trash")
-                }
-                .tint(.orange)
-            } header: {
-                Text("Quick Actions")
-            } footer: {
-                Text("Marking an item removes it from your active list.")
             }
 
             // MARK: Delete Section
@@ -113,6 +121,12 @@ struct EditItemView: View {
         .navigationTitle("Edit Item")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") {
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                }
+            }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") {
                     saveChanges()
@@ -126,6 +140,10 @@ struct EditItemView: View {
             location = item.location
             expirationDate = item.expirationDate
             notes = item.notes ?? ""
+            let parsed = SizeUnit.parse(item.size)
+            sizeQuantity = parsed.quantity
+            sizeUnit = parsed.unit
+            remainingAmount = item.remainingAmount < 0.5 ? 0 : 1
         }
         // Delete confirmation alert
         .alert("Delete Item?", isPresented: $showingDeleteAlert) {
@@ -150,29 +168,18 @@ struct EditItemView: View {
         item.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         item.location = location
         item.expirationDate = expirationDate
+        item.remainingAmount = remainingAmount
 
         let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         item.notes = trimmedNotes.isEmpty ? nil : trimmedNotes
+
+        item.size = SizeUnit.format(quantity: sizeQuantity, unit: sizeUnit)
 
         // Reschedule notifications with the new expiration date
         notificationService.cancelNotification(for: item)
         notificationService.scheduleNotifications(for: item)
 
         // SwiftData automatically saves changes
-        dismiss()
-    }
-
-    // Mark the item as used (consumed)
-    private func markAsUsed() {
-        item.status = .used
-        notificationService.cancelNotification(for: item)
-        dismiss()
-    }
-
-    // Mark the item as discarded (thrown away)
-    private func markAsDiscarded() {
-        item.status = .discarded
-        notificationService.cancelNotification(for: item)
         dismiss()
     }
 

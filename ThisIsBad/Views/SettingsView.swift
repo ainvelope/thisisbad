@@ -8,6 +8,9 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var notificationService: NotificationService
 
+    /// When false, hides the Done button (e.g. when displayed as a tab).
+    var showDismissButton: Bool = true
+
     // Options for "days before" picker
     private let dayOptions = [1, 2, 3, 5, 7]
 
@@ -86,9 +89,11 @@ struct SettingsView: View {
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        dismiss()
+                if showDismissButton {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") {
+                            dismiss()
+                        }
                     }
                 }
             }

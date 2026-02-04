@@ -29,6 +29,6 @@ struct ThisIsBadApp: App {
         }
         // Configure SwiftData with our FoodItem model
         // This creates the database and makes it available throughout the app
-        .modelContainer(for: FoodItem.self)
+        .modelContainer(for: [FoodItem.self, GroceryItem.self])
     }
 }

@@ -1,6 +1,74 @@
 import SwiftData
 import Foundation
 
+// MARK: - Size Unit
+// Units for food item size (e.g., 2 gal, 500 ml).
+// CaseIterable for picker; none case for optional field.
+enum SizeUnit: String, Codable, CaseIterable, Identifiable {
+    case none = ""
+    case oz = "oz"
+    case quart = "quart"
+    case gal = "gal"
+    case lbs = "lbs"
+    case ml = "ml"
+    case liter = "L"
+    case ltr = "ltr"
+    case cup = "cup"
+    case pint = "pint"
+    case g = "g"
+    case kg = "kg"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        self == .none ? "—" : rawValue
+    }
+
+    /// Parse a size string (e.g. "2 gal") into quantity and unit.
+    static func parse(_ sizeString: String?) -> (quantity: String, unit: SizeUnit) {
+        let trimmed = sizeString?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else { return ("", .none) }
+
+        let parts = trimmed.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
+        if parts.count == 2 {
+            let q = String(parts[0])
+            let u = String(parts[1])
+            if let unit = SizeUnit(rawValue: u) {
+                return (q, unit)
+            }
+            return (q, .none)
+        }
+        if parts.count == 1 {
+            let single = String(parts[0])
+            if Double(single) != nil {
+                return (single, .none)
+            }
+            if let unit = SizeUnit(rawValue: single) {
+                return ("", unit)
+            }
+        }
+        return (trimmed, .none)
+    }
+
+    /// Build a size string from quantity and unit.
+    static func format(quantity: String, unit: SizeUnit) -> String? {
+        let q = quantity.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasQuantity = !q.isEmpty && Double(q) != nil
+        let hasUnit = unit != .none
+
+        if hasQuantity && hasUnit {
+            return "\(q) \(unit.rawValue)"
+        }
+        if hasQuantity {
+            return q
+        }
+        if hasUnit {
+            return unit.rawValue
+        }
+        return nil
+    }
+}
+
 // MARK: - Storage Location
 // This enum defines where food can be stored in your home.
 // CaseIterable lets us loop through all cases (useful for pickers).
@@ -93,8 +161,11 @@ class FoodItem {
     // When the item was added to the app
     var dateAdded: Date
 
-    // Manual sort order (used when sorting is set to manual)
-    var sortOrder: Int
+    // Amount remaining (0...1, where 1.0 = 100%). Default 1.0 for new and legacy items.
+    var remainingAmount: Double = 1.0
+
+    // Optional size/unit (e.g., gal, ltr, oz, quart)
+    var size: String?
 
     // MARK: - Computed Properties
 
@@ -151,7 +222,7 @@ class FoodItem {
 
     // MARK: - Initializer
 
-    init(name: String, location: StorageLocation, expirationDate: Date, notes: String? = nil) {
+    init(name: String, location: StorageLocation, expirationDate: Date, notes: String? = nil, remainingAmount: Double = 1.0, size: String? = nil) {
         self.id = UUID()
         self.name = name
         self.locationRaw = location.rawValue
@@ -159,6 +230,7 @@ class FoodItem {
         self.notes = notes
         self.statusRaw = ItemStatus.active.rawValue
         self.dateAdded = Date()
-        self.sortOrder = 0
+        self.remainingAmount = min(max(remainingAmount, 0), 1)
+        self.size = size?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true ? nil : size?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

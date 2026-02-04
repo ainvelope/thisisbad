@@ -1,76 +1,89 @@
 import SwiftUI
 import SwiftData
 
+// MARK: - Tab
+/// Represents the main tabs in the app's tab bar.
+enum Tab: String, CaseIterable {
+    case home
+    case search
+    case addItem
+    case groceryList
+    case settings
+}
+
 // MARK: - Content View
-// This is the main view of the app, containing the location tabs and navigation.
+// This is the main view of the app, containing the tab bar and navigation.
 struct ContentView: View {
     // MARK: - Properties
 
     // @State creates a mutable property that SwiftUI watches for changes.
-    // When this changes, the view automatically updates.
+    @State private var selectedTab: Tab = .home
     @State private var selectedLocation: StorageLocation = .fridge
-
-    // Controls whether the "Add Item" sheet is showing
-    @State private var showingAddItem = false
-
-    // Controls whether the Settings sheet is showing
-    @State private var showingSettings = false
 
     // MARK: - Body
 
     var body: some View {
-        // NavigationStack provides navigation bar and navigation capabilities
-        NavigationStack {
-            VStack(spacing: 0) {
-                // MARK: Location Picker
-                // A segmented control to switch between Fridge/Freezer/Pantry
-                Picker("Storage Location", selection: $selectedLocation) {
-                    // Loop through all storage locations
-                    ForEach(StorageLocation.allCases) { location in
-                        // Show icon and text for each location
-                        Label(location.rawValue, systemImage: location.iconName)
-                            .tag(location)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .padding()
+        TabView(selection: $selectedTab) {
+            // MARK: Home Tab
+            NavigationStack {
+                VStack(spacing: 0) {
+                    FoodListView(location: selectedLocation)
+                        .frame(maxHeight: .infinity)
 
-                // MARK: Food List
-                // Display the list of items for the selected location
-                FoodListView(location: selectedLocation)
-            }
-            .navigationTitle("ThisIsBad")
-            .toolbar {
-                // MARK: Toolbar Items
-
-                // Settings button (top left)
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button {
-                        showingSettings = true
-                    } label: {
-                        Image(systemName: "gear")
+                    // Location Picker: switch between Fridge/Freezer/Pantry
+                    Picker("Storage Location", selection: $selectedLocation) {
+                        ForEach(StorageLocation.allCases) { location in
+                            Label(location.rawValue, systemImage: location.iconName)
+                                .tag(location)
+                        }
                     }
-                    .accessibilityLabel("Settings")
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 12)
                 }
+                .navigationTitle("ThisIsBad")
+            }
+            .tabItem {
+                Image(systemName: "house")
+            }
+            .accessibilityLabel("Home")
+            .tag(Tab.home)
 
-                // Add item button (top right)
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        showingAddItem = true
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .accessibilityLabel("Add food item")
+            // MARK: Search Tab
+            SearchView()
+                .tabItem {
+                    Image(systemName: "magnifyingglass")
                 }
+                .accessibilityLabel("Search")
+                .tag(Tab.search)
+
+            // MARK: Add Item Tab
+            AddItemView(
+                defaultLocation: selectedLocation,
+                onSaveComplete: { selectedTab = .home },
+                onCancel: { selectedTab = .home }
+            )
+            .tabItem {
+                Image(systemName: "plus")
             }
-            // Present the Add Item view as a sheet (slides up from bottom)
-            .sheet(isPresented: $showingAddItem) {
-                AddItemView(defaultLocation: selectedLocation)
+            .accessibilityLabel("Add Item")
+            .tag(Tab.addItem)
+
+            // MARK: Grocery List Tab
+            GroceryListView()
+                .tabItem {
+                    Image(systemName: "cart")
+                }
+                .accessibilityLabel("Grocery List")
+                .tag(Tab.groceryList)
+
+            // MARK: Settings Tab
+            SettingsView(showDismissButton: false)
+            .tabItem {
+                Image(systemName: "gear")
             }
-            // Present the Settings view as a sheet
-            .sheet(isPresented: $showingSettings) {
-                SettingsView()
-            }
+            .accessibilityLabel("Settings")
+            .tag(Tab.settings)
         }
     }
 }
@@ -79,6 +92,6 @@ struct ContentView: View {
 // This allows you to see the view in Xcode's preview canvas
 #Preview {
     ContentView()
-        .modelContainer(for: FoodItem.self, inMemory: true)
+        .modelContainer(for: [FoodItem.self, GroceryItem.self], inMemory: true)
         .environmentObject(NotificationService())
 }

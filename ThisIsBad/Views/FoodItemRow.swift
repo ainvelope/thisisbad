@@ -9,10 +9,21 @@ struct FoodItemRow: View {
     // The food item to display
     let item: FoodItem
 
+    /// When true, shows the storage location (e.g. for search results across all locations).
+    var showLocation: Bool = false
+
     // MARK: - Body
 
     var body: some View {
         HStack(spacing: 12) {
+            // MARK: Status Indicator
+            // Shows a colored icon based on expiration status.
+            // We use both color AND icon for accessibility.
+            Image(systemName: item.expirationStatus.iconName)
+                .foregroundStyle(statusColor)
+                .font(.title2)
+                .accessibilityLabel(item.expirationStatus.accessibilityLabel)
+
             // MARK: Item Details
             VStack(alignment: .leading, spacing: 4) {
                 // Item name
@@ -32,6 +43,13 @@ struct FoodItemRow: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
+
+                // Location label (when showing items from multiple locations)
+                if showLocation {
+                    Text(item.location.rawValue)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Spacer()
@@ -47,7 +65,7 @@ struct FoodItemRow: View {
         .padding(.vertical, 4)
         // Accessibility: Read all the important info together
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(item.name), \(item.expirationText), \(item.expirationStatus.accessibilityLabel)")
+        .accessibilityLabel("\(item.name), \(item.expirationText), \(showLocation ? "\(item.location.rawValue), " : "")\(item.expirationStatus.accessibilityLabel)")
     }
 
     // MARK: - Computed Properties
